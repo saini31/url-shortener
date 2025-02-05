@@ -196,6 +196,9 @@
                         </button>
                     </form>
                     <!-- All Shortened URLs -->
+                    <a href="{{ route('urls.export') }}" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                        Download CSV
+                    </a>
                     <div class="mt-4">
                         <h4 class="font-bold text-lg mb-2">All Shortened URLs</h4>
                         <table class="table-auto w-full border-collapse border border-gray-300">

@@ -9,78 +9,67 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use App\Models\ShortUrl;
-use App\Models\Client;
 
 class InvitationController extends Controller
 {
     /**
-     * Show invitations page (for superadmins/admins).
+     * Show invitations page (for superadmins/admins) with caching.
      */
     public function index(Request $request)
     {
         $user = Auth::user();
 
-        // Get filter inputs
-        $year = $request->input('year');
-        $month = $request->input('month');
-        $day = $request->input('day');
+        // Cache key based on user role and filter params
+        $cacheKey = "invitations_{$user->id}_{$request->year}_{$request->month}_{$request->day}";
 
-        // Base query for URLs
-        $query = ShortUrl::query();
+        // Try to get cached data, if not available fetch from DB
+        $data = Cache::remember($cacheKey, now()->addMinutes(30), function () use ($user, $request) {
+            // Get filter inputs
+            $year = $request->input('year');
+            $month = $request->input('month');
+            $day = $request->input('day');
 
-        if ($user->role === 'super_admin') {
-            // Super Admin sees all URLs and all clients except super_admin
-            $query->with('user');
-            $clients = User::where('role', '!=', 'super_admin')->get();
-        } elseif ($user->role === 'admin') {
-            // Get emails of clients invited by this admin
-            $invitedEmails = Invitation::where('admin_id', $user->id)->pluck('email');
+            // Base query for URLs
+            $query = ShortUrl::query();
 
-            // Get user IDs of clients who registered with those emails (EXCLUDE Admin's own ID)
-            $clientIds = User::whereIn('email', $invitedEmails)->pluck('id');
+            if ($user->role === 'super_admin') {
+                // Super Admin sees all URLs and clients except super_admin
+                $query->with('user');
+                $clients = User::where('role', '!=', 'super_admin')->get();
+            } elseif ($user->role === 'admin') {
+                $invitedEmails = Invitation::where('admin_id', $user->id)->pluck('email');
+                $clientIds = User::whereIn('email', $invitedEmails)->pluck('id');
+                $query->whereIn('user_id', $clientIds->push($user->id));
+                $clients = User::whereIn('id', $clientIds)->where('id', '!=', $user->id)->get();
+            } else {
+                $query->where('user_id', $user->id);
+                $clients = collect();
+            }
 
-            // Admin sees their own URLs + URLs of their invited clients
-            $query->whereIn('user_id', $clientIds->push($user->id));
+            // Apply date filters
+            if ($year) $query->whereYear('created_at', $year);
+            if ($month) $query->whereMonth('created_at', $month);
+            if ($day) $query->whereDay('created_at', $day);
 
-            // Admin sees only their invited clients (EXCLUDING their own ID)
-            $clients = User::whereIn('id', $clientIds)->where('id', '!=', $user->id)->get();
-        } else {
-            // Members only see their own URLs, no access to clients
-            $query->where('user_id', $user->id);
-            $clients = collect(); // Empty collection
-        }
+            // Fetch paginated results
+            $urls = $query->paginate(10);
 
-        // Apply date filters
-        if ($year) {
-            $query->whereYear('created_at', $year);
-        }
-        if ($month) {
-            $query->whereMonth('created_at', $month);
-        }
-        if ($day) {
-            $query->whereDay('created_at', $day);
-        }
+            // Fetch invitations once for efficiency
+            $invitations = Invitation::whereIn('email', $clients->pluck('email'))->get()->keyBy('email');
 
-        // Fetch paginated results
-        $urls = $query->paginate(10);
+            // Attach invitation status to each client (user)
+            foreach ($clients as $client) {
+                $client->invitation_status = $invitations[$client->email]->status ?? 'No Invitation';
+            }
 
-        // Fetch invitations once for efficiency
-        $invitations = Invitation::whereIn('email', $clients->pluck('email'))->get()->keyBy('email');
+            return compact('urls', 'invitations', 'clients');
+        });
 
-        // Attach invitation status to each client (user)
-        foreach ($clients as $client) {
-            $client->invitation_status = $invitations[$client->email]->status ?? 'No Invitation';
-        }
-
-        return view('dashboard', compact('urls', 'invitations', 'clients'));
+        return view('dashboard', $data);
     }
 
-
-    public function create()
-    {
-        return view('invitations.create');
-    }
     /**
      * Send an invitation to a client via email.
      */
@@ -88,19 +77,18 @@ class InvitationController extends Controller
     {
         $request->validate([
             'email' => 'required|email|unique:invitations,email',
-            'role' => 'required|in:admin,member', // Ensure role is provided and valid
+            'role' => 'required|in:admin,member',
         ]);
 
         $token = Str::random(32);
         $expiresAt = Carbon::now()->addMinutes(30);
-
 
         $invitation = Invitation::create([
             'email' => $request->email,
             'role' => $request->role,
             'token' => $token,
             'expires_at' => $expiresAt,
-            'admin_id' => Auth::user()->role === 'super_admin' ? null : Auth::id(), // If super admin, admin_id is null
+            'admin_id' => Auth::user()->role === 'super_admin' ? null : Auth::id(),
         ]);
 
         $registrationUrl = route('register.invitation', ['token' => $token]);
@@ -110,9 +98,18 @@ class InvitationController extends Controller
             $message->to($request->email)
                 ->subject('You have been invited to join URL Shortener');
         });
+           
+        // Invalidate cache after sending an invitation
+        Cache::flush();
 
         return redirect()->route('invitations.index')->with('success', 'Invitation sent successfully!');
     }
+    public function create()
+    {
+        return view('invitations.create');
+    }
+
+
 
 
     /**
@@ -120,8 +117,9 @@ class InvitationController extends Controller
      */
     public function register($token)
     {
-
-        $invitation = Invitation::where('token', $token)->where('expires_at', '>', now())->firstOrFail();
+        $invitation = Cache::remember("invitation_{$token}", now()->addMinutes(30), function () use ($token) {
+            return Invitation::where('token', $token)->where('expires_at', '>', now())->firstOrFail();
+        });
 
         return view('auth.register', compact('invitation'));
     }
@@ -145,13 +143,14 @@ class InvitationController extends Controller
             'name' => $request->name,
             'email' => $invitation->email,
             'password' => bcrypt($request->password),
-            'role' => $invitation->role, // Automatically set role from invitation
+            'role' => $invitation->role,
         ]);
 
-        // Update the invitation status to 'accepted'
+        // Update invitation status
         $invitation->update(['status' => 'accepted']);
-        // Delete invitation after successful registration
-        // $invitation->delete();
+
+        // Invalidate cache
+        Cache::flush();
 
         return redirect()->route('login')->with('success', 'Your account has been created successfully!');
     }

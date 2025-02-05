@@ -36,7 +36,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/shorten', [ShortUrlController::class, 'store'])->name('shorturl.store');
     Route::get('/urls/export', [ShortUrlController::class, 'export'])->name('urls.export');
 });
-Route::get('/s/{shortCode}', [ShortUrlController::class, 'redirect']);
+Route::get('/s/{shortCode}', [ShortUrlController::class, 'redirect']);   
 
 
 Route::middleware(['auth'])->group(function () {

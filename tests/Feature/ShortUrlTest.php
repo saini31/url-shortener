@@ -1,4 +1,5 @@
 <?php
+
 namespace Tests\Feature;
 
 use Tests\TestCase;
@@ -53,7 +54,7 @@ class ShortUrlTest extends TestCase
 
         // Define the long URL to shorten
         $longUrl = 'https://www.example.com';
-
+        
         // Create the first short URL
         $this->post(route('shorturl.store'), [
             'long_url' => $longUrl
