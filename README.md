@@ -132,6 +132,9 @@ Run the following commands to install the required dependencies for your project
     DB_DATABASE=url_shortener
     DB_USERNAME=root
     DB_PASSWORD=
+
+    CACHE_DRIVER=database
+    
     MAIL_MAILER=smtp
     MAIL_HOST=smtp.gmail.com
     MAIL_PORT=587
