@@ -132,6 +132,14 @@ Run the following commands to install the required dependencies for your project
     DB_DATABASE=url_shortener
     DB_USERNAME=root
     DB_PASSWORD=
+    MAIL_MAILER=smtp
+    MAIL_HOST=smtp.gmail.com
+    MAIL_PORT=587
+    MAIL_USERNAME=mail
+    MAIL_PASSWORD=password
+    MAIL_ENCRYPTION=tls
+    MAIL_FROM_ADDRESS="mail"
+    MAIL_FROM_NAME="${APP_NAME}"
     ```
 
 ## Step 4: Run migrations and seed the database
