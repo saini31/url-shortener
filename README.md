@@ -123,7 +123,7 @@ Run the following commands to install the required dependencies for your project
     php artisan key:generate
     ```
 
-3. Configure the database settings in your `.env` file. Make sure the database settings match your local environment:
+3. Configure the database settings and smtp credentials for send mail in your `.env` file. Make sure the database settings match your local environment:
 
     ```env
     DB_CONNECTION=mysql
