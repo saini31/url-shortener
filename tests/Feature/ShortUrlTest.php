@@ -3,40 +3,38 @@
 namespace Tests\Feature;
 
 use Tests\TestCase;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
+
 use App\Models\User;
 use App\Models\ShortUrl;
 
 class ShortUrlTest extends TestCase
 {
-    use RefreshDatabase;
-
+    use DatabaseTransactions;
     /**
      * Test if authenticated user can create a short URL
      *
      * @test
      */
-    public function authenticated_user_can_create_short_url()
+    public function test_authenticated_admin_can_create_short_url()
     {
-        // Create a user and log them in
-        $user = User::factory()->create();
+        $user = User::factory()->create([
+            'role' => 'admin', // Ensures the user has the right role
+        ]);
+
         $this->actingAs($user);
 
-        // Define the long URL to shorten
         $longUrl = 'https://www.example.com';
 
-        // Make the POST request to create the short URL
         $response = $this->post(route('shorturl.store'), [
             'long_url' => $longUrl
         ]);
 
-        // Assert that the short URL was created in the database
         $this->assertDatabaseHas('short_urls', [
             'long_url' => $longUrl,
             'user_id' => $user->id,
         ]);
 
-        // Assert the response is a redirect back with a success message
         $response->assertRedirect();
         $response->assertSessionHas('success');
     }
@@ -54,7 +52,7 @@ class ShortUrlTest extends TestCase
 
         // Define the long URL to shorten
         $longUrl = 'https://www.example.com';
-        
+
         // Create the first short URL
         $this->post(route('shorturl.store'), [
             'long_url' => $longUrl
